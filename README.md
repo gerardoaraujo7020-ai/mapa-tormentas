@@ -1,6 +1,6 @@
 # Mapa del tiempo en vivo · El Viejo Viento
 
-Mapa interactivo de la provincia de Buenos Aires y alrededores con capas animadas:
+Mapa interactivo de la franja central de Argentina (de Chile al Atlántico) con capas animadas:
 topes nubosos y visible del satélite GOES-19 (últimas 3 h, cada 10 min) y lluvia
 pronosticada y viento GFS (72 h). Fuentes públicas de NOAA, sin claves.
 

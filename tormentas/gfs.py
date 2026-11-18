@@ -21,6 +21,10 @@ BUCKET = "https://noaa-gfs-bdp-pds.s3.amazonaws.com"
 CAJA = dict(lon_min=-64.5, lon_max=-55.5, lat_min=-41.5, lat_max=-32.5)
 
 _S = requests.Session()
+# reintentos ante cortes momentáneos de red
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+_S.mount("https://", HTTPAdapter(max_retries=Retry(total=4, backoff_factor=1.5, status_forcelist=(500, 502, 503, 504))))
 
 
 def _url(ciclo: datetime, plazo: int) -> str:

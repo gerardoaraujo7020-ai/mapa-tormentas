@@ -26,8 +26,8 @@ from tormentas import envivo, gfs, mapa
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 # Ancho en píxeles de cada capa: "baja" para animar, "alta" (resolución nativa) al pausar
-ANCHO = {2: 1600, 13: 900}
-ANCHO_HD = {2: 3200, 13: 1800}
+ANCHO = {2: 1900, 13: 1100}
+ANCHO_HD = {2: 4400, 13: 2000}
 CALIDAD = {"baja": 74, "alta": 84}
 LUGARES = [("Benito Juárez", -37.68, -59.80), ("Tandil", -37.32, -59.13), ("Necochea", -38.55, -58.74),
            ("Tres Arroyos", -38.38, -60.28), ("Azul", -36.78, -59.86), ("Olavarría", -36.89, -60.32),
@@ -136,9 +136,15 @@ def actualizar(salida, horas, cache):
     plantilla = os.path.join(AQUI, "datos", "mapa")
     shutil.copy(os.path.join(plantilla, "index.html"), salida)
     shutil.copytree(os.path.join(plantilla, "lib"), os.path.join(salida, "lib"), dirs_exist_ok=True)
-    if not os.path.exists(os.path.join(salida, "limites.js")):
-        with open(os.path.join(salida, "limites.js"), "w", encoding="utf-8") as fh:
-            fh.write("window.LIMITES = " + open(os.path.join(AQUI, "datos", "limites.geojson"), encoding="utf-8").read() + ";")
+    with open(os.path.join(salida, "limites.js"), "w", encoding="utf-8") as fh:
+        fh.write("window.LIMITES = " + open(os.path.join(AQUI, "datos", "limites_mapa.geojson"), encoding="utf-8").read() + ";")
+    # si cambió el área del mapa, las imágenes viejas no sirven: se borran
+    firma = json.dumps([mapa.CAJA_MAPA, ANCHO, ANCHO_HD], sort_keys=True)
+    fpath = os.path.join(capas, "area.json")
+    if not os.path.exists(fpath) or open(fpath).read() != firma:
+        shutil.rmtree(capas, ignore_errors=True)
+        os.makedirs(capas, exist_ok=True)
+        open(fpath, "w").write(firma)
 
     n = satelite(capas, horas)
     try:

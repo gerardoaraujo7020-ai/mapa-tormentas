@@ -60,6 +60,7 @@
     .marca b { font-size:12px; }
     .reloj { top:58px; padding:4px 12px; }
     .reloj b { font-size:16px; }
+    .reloj span { font-size:11px; white-space:nowrap; }
     .panel { bottom:10px; padding:8px; }
     .op { margin-left:0; }
     .vel { display:none; }
@@ -106,8 +107,9 @@ const conVer = u => u ? u + "?v=" + VER : u;
 for (const k of ["ir", "vis"]) C[k].forEach(f => { f.f = conVer(f.f); f.a = conVer(f.a); });
 if (C.pron) C.pron.pasos.forEach(f => { f.f = conVer(f.f); f.v = conVer(f.v); });
 const B = L.latLngBounds(C.bounds);
-const mapa = L.map("mapa", { zoomControl:true, minZoom:4, maxZoom:10, worldCopyJump:false })
-  .setView([-37.2, -60.0], window.innerWidth < 600 ? 5 : 6);
+const mapa = L.map("mapa", { zoomControl:true, minZoom:3, maxZoom:10, worldCopyJump:false, zoomSnap:0.25 });
+// encuadre inicial: toda la franja, dejando lugar para el panel de abajo
+mapa.fitBounds(B, { paddingTopLeft:[0, window.innerWidth < 600 ? 100 : 70], paddingBottomRight:[0, window.innerWidth < 600 ? 230 : 160] });
 mapa.zoomControl.setPosition("topright");
 window.mapa = mapa;
 
@@ -134,7 +136,7 @@ for (const [n, la, lo] of C.lugares) {
     icon:L.divIcon({ className:"lugar" + sec, iconSize:[0, 0], iconAnchor:[0, 0],
                     html:`<span style="${IZQ.has(n) ? "right" : "left"}:6px">${n}</span>` }) }).addTo(mapa);
 }
-const zoomClase = () => mapa.getContainer().classList.toggle("zoom-bajo", mapa.getZoom() <= 5);
+const zoomClase = () => mapa.getContainer().classList.toggle("zoom-bajo", mapa.getZoom() < 5.5);
 mapa.on("zoomend", zoomClase); zoomClase();
 
 // ---------- fechas en hora argentina ----------

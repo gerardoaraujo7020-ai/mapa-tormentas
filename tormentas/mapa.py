@@ -14,7 +14,8 @@ from pyproj import Proj
 from . import cartas
 from .envivo import BUCKET, _inicio
 
-CAJA_MAPA = dict(lon_min=-68.0, lon_max=-52.0, lat_min=-43.0, lat_max=-30.0)
+# Franja central: del Pacífico (Chile) al Atlántico, de Córdoba/Santa Fe al norte patagónico
+CAJA_MAPA = dict(lon_min=-76.0, lon_max=-52.0, lat_min=-43.0, lat_max=-29.0)
 _R = 6378137.0
 
 

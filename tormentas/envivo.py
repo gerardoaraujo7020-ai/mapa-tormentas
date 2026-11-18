@@ -23,6 +23,10 @@ CAJA = dict(lon_min=-66.0, lon_max=-53.0, lat_min=-42.0, lat_max=-31.0)
 
 BUCKET = "https://noaa-goes19.s3.amazonaws.com"
 _S = requests.Session()
+# reintentos ante cortes momentáneos de red
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+_S.mount("https://", HTTPAdapter(max_retries=Retry(total=4, backoff_factor=1.5, status_forcelist=(500, 502, 503, 504))))
 _VENTANA = {}
 
 
