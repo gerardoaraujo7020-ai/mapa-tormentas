@@ -1,0 +1,55 @@
+# Actualiza el mapa del tiempo (satélite + lluvia pronosticada) cada 10 minutos y lo publica en GitHub Pages.
+# Requisitos (una vez): repo público en GitHub con este código, y en
+# Settings > Pages: "Deploy from a branch" -> rama gh-pages, carpeta / (root).
+name: Mapa del tiempo en vivo
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # GitHub puede demorar unos minutos cada disparo
+  workflow_dispatch: {}       # botón para correrlo a mano
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nubosidad
+  cancel-in-progress: false
+
+jobs:
+  actualizar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # recupera los cuadros ya publicados para sólo procesar los nuevos
+      - name: Traer la versión publicada
+        run: |
+          git fetch origin gh-pages --depth=1 || true
+          mkdir -p publicado
+          if git rev-parse --verify origin/gh-pages >/dev/null 2>&1; then
+            git --work-tree=publicado checkout origin/gh-pages -- .
+            git reset -q
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          pip install -r requirements.txt
+
+      - name: Actualizar imágenes
+        run: python mapa_vivo.py --una-vez --salida publicado --cache cache/gfs
+
+      - name: Publicar en GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./publicado
+          publish_branch: gh-pages
+          force_orphan: true      # no acumula historial de imágenes
+          commit_message: "Nubosidad en vivo"

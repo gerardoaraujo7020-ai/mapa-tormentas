@@ -1,0 +1,16 @@
+numpy
+xarray
+netCDF4
+cfgrib
+eccodes
+matplotlib
+shapely
+pyproj
+scipy
+requests
+reportlab
+pillow
+pandas
+h5py
+fsspec
+aiohttp
