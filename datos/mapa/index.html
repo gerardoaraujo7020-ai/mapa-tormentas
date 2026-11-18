@@ -100,6 +100,11 @@
 <script>document.write('<script src="capas.js?' + Date.now() + '"><\/script>');</script>  <!-- siempre la versión más nueva -->
 <script>
 const C = window.CAPAS;
+// Versión de las imágenes: subirla cuando cambie el estilo de las capas, para que el navegador no muestre las viejas
+const VER = "2";
+const conVer = u => u ? u + "?v=" + VER : u;
+for (const k of ["ir", "vis"]) C[k].forEach(f => { f.f = conVer(f.f); f.a = conVer(f.a); });
+if (C.pron) C.pron.pasos.forEach(f => { f.f = conVer(f.f); f.v = conVer(f.v); });
 const B = L.latLngBounds(C.bounds);
 const mapa = L.map("mapa", { zoomControl:true, minZoom:4, maxZoom:10, worldCopyJump:false })
   .setView([-37.2, -60.0], window.innerWidth < 600 ? 5 : 6);
