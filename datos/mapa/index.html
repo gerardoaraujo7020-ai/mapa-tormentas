@@ -115,8 +115,24 @@ for (const k of ["ir", "vis"]) C[k].forEach(f => { f.f = conVer(f.f); f.a = conV
 if (C.pron) C.pron.pasos.forEach(f => { f.f = conVer(f.f); f.v = conVer(f.v); });
 const B = L.latLngBounds(C.bounds);
 const mapa = L.map("mapa", { zoomControl:true, minZoom:3, maxZoom:10, worldCopyJump:false, zoomSnap:0.25 });
-// encuadre inicial: toda la franja, dejando lugar para el panel de abajo
-mapa.fitBounds(B, { paddingTopLeft:[0, window.innerWidth < 600 ? 100 : 70], paddingBottomRight:[0, window.innerWidth < 600 ? 140 : 160] });
+// encuadre inicial: la imagen de la franja llena todo el recuadro (como "cover").
+// Si el recuadro cambia de tamaño (por ejemplo dentro de la web, que lo carga tarde), se vuelve a encuadrar
+// mientras la persona no haya movido el mapa.
+let tocado = false;
+function encuadrar() {
+  const t = mapa.getSize();
+  if (!t.x || !t.y || tocado) return;
+  if (t.x >= t.y) {          // recuadro apaisado (compu): la franja tapa todo el recuadro
+    mapa.setView(B.getCenter(), mapa.getBoundsZoom(B, true), { animate:false });
+  } else {                    // recuadro vertical (celular): provincia de Buenos Aires y alrededores
+    mapa.fitBounds([[-41.5, -66], [-32, -55]], { paddingTopLeft:[0, 90], paddingBottomRight:[0, 120], animate:false });
+  }
+}
+mapa.setView(B.getCenter(), 5);
+encuadrar();
+new ResizeObserver(() => { mapa.invalidateSize({ animate:false }); encuadrar(); }).observe(document.getElementById("mapa"));
+mapa.getContainer().addEventListener("pointerdown", () => { tocado = true; }, { once:true });
+mapa.getContainer().addEventListener("wheel", () => { tocado = true; }, { once:true });
 mapa.zoomControl.setPosition("topright");
 window.mapa = mapa;
 
