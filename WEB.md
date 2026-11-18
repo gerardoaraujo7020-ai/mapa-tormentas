@@ -7,6 +7,7 @@ estática: `index.html` + imágenes. No necesita servidor propio ni base de dato
 - **Topes nubosos** GOES-19 (infrarrojo realzado), últimas 3 h cada 10 min, de día y de noche.
 - **Visible** GOES-19, últimas 3 h cada 10 min (sólo de día).
 - **Lluvia pronosticada** GFS, próximas 72 h en pasos de 3 h.
+- **Viento** GFS a 10 m: velocidad en colores y líneas animadas con la dirección; tocando el mapa muestra viento, ráfagas y lluvia en ese punto.
 - Mapa base oscuro de Esri (gratis, sin clave, con la atribución que ya figura abajo a la derecha).
 
 Se puede abrir una capa directa con `?capa=ir`, `?capa=vis` o `?capa=pron`.

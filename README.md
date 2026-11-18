@@ -2,7 +2,7 @@
 
 Mapa interactivo de la provincia de Buenos Aires y alrededores con capas animadas:
 topes nubosos y visible del satélite GOES-19 (últimas 3 h, cada 10 min) y lluvia
-pronosticada GFS (72 h). Fuentes públicas de NOAA, sin claves.
+pronosticada y viento GFS (72 h). Fuentes públicas de NOAA, sin claves.
 
 - Se actualiza solo cada 10 minutos con GitHub Actions (`.github/workflows/mapa_en_vivo.yml`)
   y se publica en GitHub Pages desde la rama `gh-pages`.

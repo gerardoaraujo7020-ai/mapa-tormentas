@@ -125,13 +125,30 @@ def png_visible_pleno(refl, path):
     _guardar(Image.fromarray(g, "L"), path)
 
 
+# Realce de topes nubosos estilo SMN: grises para nubes bajas, azules y verdes para
+# nubes medias/altas, amarillo-naranja-rojo para tormentas, magenta y blanco para topes extremos.
+ESCALA_TOPES = [(30, "#202020"), (10, "#6e6e6e"), (0, "#a8a8a8"), (-10, "#9fd8ff"), (-20, "#3f9ae8"),
+                (-30, "#1f4fbf"), (-35, "#2fbf4a"), (-45, "#137a2c"), (-50, "#ffe83b"), (-56, "#ffa21a"),
+                (-62, "#ff4a12"), (-68, "#c4100c"), (-74, "#6e0606"), (-78, "#ff4dff"), (-84, "#f2f2f2"),
+                (-90, "#9e9e9e")]
+
+
+def _cmap_topes():
+    import matplotlib.colors as mcolors
+    v = [p[0] for p in ESCALA_TOPES][::-1]
+    c = [p[1] for p in ESCALA_TOPES][::-1]
+    v0, v1 = v[0], v[-1]
+    return mcolors.LinearSegmentedColormap.from_list("topes_smn", [((x - v0) / (v1 - v0), k) for x, k in zip(v, c)]), v0, v1
+
+
 def png_topes(tb, path):
-    """IR realzado: nubes bajas grises semitransparentes; topes fríos en color y opacos."""
-    cmap, v0, v1 = cartas._cmap_ir()
+    """IR realzado tipo SMN: cielo despejado transparente, nubes bajas grises, medias en azul/verde,
+    tormentas en amarillo a rojo y topes extremos en magenta/blanco."""
+    cmap, v0, v1 = _cmap_topes()
     t = np.nan_to_num(tb, nan=30.0)
-    rgba = (cmap((t - v0) / (v1 - v0)) * 255).astype(np.uint8)
-    alfa = np.clip((5 - t) / 40, 0, 1)            # transparente sobre +5 °C, opaco bajo −35 °C
-    alfa = np.where(t < -45, 1.0, alfa * 0.85)
+    rgba = (cmap(np.clip((t - v0) / (v1 - v0), 0, 1)) * 255).astype(np.uint8)
+    alfa = np.clip((12 - t) / 14, 0, 1) * 0.7      # transparente sobre +12 °C, gris semitransparente
+    alfa = np.where(t < -2, 0.95, alfa)            # nubes medias, altas y tormentas: opacas
     rgba[..., 3] = (alfa * 255).astype(np.uint8)
     _guardar(Image.fromarray(rgba, "RGBA"), path)
 
@@ -163,3 +180,25 @@ def png_lluvia(mm, lat, lon, path, ancho=700):
 
 
 LEYENDA_LLUVIA = list(zip(_LL_NIV, _LL_COL))
+
+# Viento a 10 m (km/h): escala tipo Windy, de azul (calma) a violeta (temporal)
+_VI_NIV = [0, 10, 20, 30, 40, 50, 60, 75, 90]
+_VI_COL = ["#3a5fcd", "#3a9bd9", "#3fbf9b", "#7ccf4f", "#e6d23a", "#f39a2b", "#e4502b", "#b8233c", "#7a1f7a"]
+LEYENDA_VIENTO = list(zip(_VI_NIV, _VI_COL))
+
+
+def png_viento(vel_kmh, lat, lon, path, ancho=700):
+    """Velocidad del viento (grilla regular) -> PNG Mercator suave, semitransparente."""
+    import matplotlib.colors as mcolors
+    from scipy.interpolate import RegularGridInterpolator
+    la, lo, v = np.asarray(lat), np.asarray(lon), np.asarray(vel_kmh)
+    if la[0] > la[-1]:
+        la, v = la[::-1], v[::-1]
+    f = RegularGridInterpolator((la, lo), v, bounds_error=False, fill_value=0.0)
+    LON, LAT = grilla_mercator(ancho)
+    z = f(np.stack([LAT.ravel(), LON.ravel()], -1)).reshape(LAT.shape)
+    cmap = mcolors.LinearSegmentedColormap.from_list(
+        "viento", [(n / _VI_NIV[-1], c) for n, c in zip(_VI_NIV, _VI_COL)])
+    rgba = (cmap(np.clip(z / _VI_NIV[-1], 0, 1)) * 255).astype(np.uint8)
+    rgba[..., 3] = 170
+    _guardar(Image.fromarray(rgba, "RGBA"), path)

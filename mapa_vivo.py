@@ -20,6 +20,8 @@ import time
 import traceback
 from datetime import datetime, timedelta, timezone
 
+import numpy as np
+
 from tormentas import envivo, gfs, mapa
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
@@ -66,7 +68,22 @@ def satelite(capas, horas):
     return nuevos
 
 
+def _campos_viento(t, f, cache):
+    ds = gfs.bajar_campos(t, f, [r"^UGRD:10 m above", r"^VGRD:10 m above", r"^GUST:surface"], cache, mapa.CAJA_MAPA)
+    return ds
+
+
+def _grilla_velocity(ds, var, numero, t):
+    """Formato que entiende leaflet-velocity (como grib2json)."""
+    la, lo = ds.latitude.values, ds.longitude.values
+    return {"header": {"parameterCategory": 2, "parameterNumber": numero, "nx": int(lo.size), "ny": int(la.size),
+                       "lo1": float(lo[0]), "la1": float(la[0]), "lo2": float(lo[-1]), "la2": float(la[-1]),
+                       "dx": float(abs(lo[1] - lo[0])), "dy": float(abs(la[1] - la[0])), "refTime": t},
+            "data": [round(float(x), 1) for x in ds[var].values.ravel()]}
+
+
 def pronostico(capas, cache):
+    """Lluvia y viento GFS de la última corrida: 0 a 72 h cada 3 h."""
     t = _ahora().replace(minute=0, second=0, microsecond=0)
     t -= timedelta(hours=t.hour % 6)
     import requests
@@ -76,23 +93,39 @@ def pronostico(capas, cache):
         t -= timedelta(hours=6)
     else:
         return None
-    ya = glob.glob(os.path.join(capas, f"pron_{t:%Y%m%d%H}_*.webp"))
-    if len(ya) < 24:
-        for p in glob.glob(os.path.join(capas, "pron_*.webp")):
+    marca = os.path.join(capas, f"pron_{t:%Y%m%d%H}.json")
+    if not os.path.exists(marca):
+        for p in glob.glob(os.path.join(capas, "pron_*")) + glob.glob(os.path.join(capas, "viento_*")):
             os.remove(p)
         print(f"  pronóstico GFS {t:%d/%m %H} UTC…")
         lluvia, _ = gfs.pronostico(t, 72, cache, paso=3, caja=mapa.CAJA_MAPA)
-        for k in range(lluvia.sizes["time"]):
-            ti = lluvia.time.values[k].astype("datetime64[s]").item()
-            f = int((ti - t).total_seconds() // 3600)
-            _webp(mapa.png_lluvia, (lluvia.isel(time=k).values, lluvia.latitude.values, lluvia.longitude.values),
-                  os.path.join(capas, f"pron_{t:%Y%m%d%H}_{f:03d}.webp"))
-    pasos = []
-    for p in sorted(glob.glob(os.path.join(capas, f"pron_{t:%Y%m%d%H}_*.webp"))):
-        f = int(os.path.basename(p)[-8:-5])
-        pasos.append({"f": "capas/" + os.path.basename(p), "t": (t + timedelta(hours=f)).isoformat(timespec="minutes")})
-    return {"corrida": t.isoformat(timespec="minutes"), "pasos": pasos,
-            "leyenda": [[v, c] for v, c in mapa.LEYENDA_LLUVIA]}
+        pasos, viento = [], []
+        for f in range(3, 73, 3):
+            ti = t + timedelta(hours=f)
+            sel = lluvia.sel(time=np.datetime64(ti))
+            fn_ll = f"pron_{t:%Y%m%d%H}_{f:03d}.webp"
+            _webp(mapa.png_lluvia, (sel.values, lluvia.latitude.values, lluvia.longitude.values),
+                  os.path.join(capas, fn_ll))
+            ds = _campos_viento(t, f, cache)
+            vel = np.hypot(ds["ugrd"], ds["vgrd"]).values * 3.6
+            fn_vi = f"viento_{t:%Y%m%d%H}_{f:03d}.webp"
+            _webp(mapa.png_viento, (vel, ds.latitude.values, ds.longitude.values), os.path.join(capas, fn_vi))
+            iso = ti.isoformat(timespec="minutes")
+            pasos.append({"f": "capas/" + fn_ll, "v": "capas/" + fn_vi, "t": iso, "desde": (ti - timedelta(hours=3)).isoformat(timespec="minutes")})
+            # datos por punto para el clic: ráfaga y lluvia en la grilla del viento
+            ll = sel.interp(latitude=ds.latitude, longitude=ds.longitude, method="nearest")
+            viento.append({"t": iso,
+                           "uv": [_grilla_velocity(ds, "ugrd", 2, iso), _grilla_velocity(ds, "vgrd", 3, iso)],
+                           "raf": [int(round(x * 3.6)) for x in ds["gust"].values.ravel()],
+                           "mm": [round(float(x), 1) for x in np.nan_to_num(ll.values).ravel()]})
+        with open(os.path.join(capas, f"viento_{t:%Y%m%d%H}.js"), "w", encoding="utf-8") as fh:
+            fh.write("window.VIENTO = " + json.dumps(viento, separators=(",", ":")) + ";")
+        json.dump({"corrida": t.isoformat(timespec="minutes"), "pasos": pasos}, open(marca, "w"))
+    info = json.load(open(marca))
+    info["leyenda"] = [[v, c] for v, c in mapa.LEYENDA_LLUVIA]
+    info["leyenda_viento"] = [[v, c] for v, c in mapa.LEYENDA_VIENTO]
+    info["viento_js"] = f"capas/viento_{t:%Y%m%d%H}.js"
+    return info
 
 
 def actualizar(salida, horas, cache):
