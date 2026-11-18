@@ -236,7 +236,9 @@ function ponerCapa(c) {
     opacity: document.getElementById("opacidad").value / 100, interactive:false }).addTo(mapa);
   precargar(lista);
   armarLinea(); leyenda();
-  const inicio = esPron() ? 0 : lista.length - 1;
+  // pronóstico: arrancar en el paso más cercano a la hora actual (no en horas ya pasadas)
+  const ahora = Date.now();
+  const inicio = esPron() ? Math.max(0, lista.findIndex(f => new Date(f.t + "Z").getTime() >= ahora)) : lista.length - 1;
   if (c === "viento") cargarViento(() => {
     velLayer = L.velocityLayer({ displayValues:false, data:VIENTO[i].uv, maxVelocity:22, velocityScale:0.009,
       particleMultiplier:1/300, lineWidth:1.6, colorScale:["rgba(255,255,255,0.85)"], opacity:0.9 }).addTo(mapa);
