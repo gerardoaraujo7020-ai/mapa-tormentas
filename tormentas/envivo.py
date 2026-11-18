@@ -35,15 +35,17 @@ def _inicio(key):
     return datetime.strptime(s, "%Y%j%H%M%S")
 
 
-def ultimas_claves(canal: int, horas: float = 3, ahora: datetime | None = None) -> list[str]:
-    """Claves de las imágenes del canal en las últimas `horas`, de la más vieja a la más nueva."""
+def ultimas_claves(canal: int, horas: float = 3, ahora: datetime | None = None, producto: str = "CMIPF") -> list[str]:
+    """Claves de las imágenes del canal en las últimas `horas`, de la más vieja a la más nueva.
+    producto="MCMIPF" devuelve el archivo multibanda (todos los canales a 2 km); `canal` se ignora."""
     ahora = ahora or datetime.now(timezone.utc).replace(tzinfo=None)
     desde = ahora - timedelta(hours=horas)
     keys, t = [], desde.replace(minute=0, second=0, microsecond=0)
     while t <= ahora:
-        pref = f"ABI-L2-CMIPF/{t:%Y}/{t.timetuple().tm_yday:03d}/{t:%H}/"
+        pref = f"ABI-L2-{producto}/{t:%Y}/{t.timetuple().tm_yday:03d}/{t:%H}/"
         xml = _S.get(f"{BUCKET}/?list-type=2&prefix={pref}", timeout=60).text
-        keys += [k for k in re.findall(r"<Key>([^<]+)</Key>", xml) if f"M6C{canal:02d}_" in k]
+        keys += [k for k in re.findall(r"<Key>([^<]+)</Key>", xml)
+                 if producto != "CMIPF" or f"M6C{canal:02d}_" in k]
         t += timedelta(hours=1)
     return sorted([k for k in keys if _inicio(k) >= desde], key=_inicio)
 

@@ -28,7 +28,9 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 # Ancho en píxeles de cada capa: "baja" para animar, "alta" (resolución nativa) al pausar
 ANCHO = {2: 1900, 13: 1100}
 ANCHO_HD = {2: 4400, 13: 2000}
-CALIDAD = {"baja": 74, "alta": 84}
+CALIDAD = {"baja": 74, "alta": 84, "cont": 66}
+ANCHO_CONT = 1200          # capas de toda Sudamérica (se ven al alejar el mapa)
+PASO_VIENTO = 4            # grilla de partículas/clic: 1 de cada 4 puntos GFS (1°) para que el archivo no pese demasiado
 LUGARES = [("Benito Juárez", -37.68, -59.80), ("Tandil", -37.32, -59.13), ("Necochea", -38.55, -58.74),
            ("Tres Arroyos", -38.38, -60.28), ("Azul", -36.78, -59.86), ("Olavarría", -36.89, -60.32),
            ("Bahía Blanca", -38.72, -62.27), ("Junín", -34.59, -60.95), ("Pehuajó", -35.81, -61.90), ("Pergamino", -33.89, -60.57),
@@ -58,7 +60,11 @@ def satelite(capas, horas):
             _webp(func, vhd, os.path.join(capas, "hd", os.path.basename(path)), CALIDAD["alta"])
             nuevos += 1
             print(f"  {pref} {t:%d/%m %H:%M} UTC")
+    nuevos += satelite_continente(capas, horas)
     limite = _ahora() - timedelta(hours=horas + 0.25)
+    for p in glob.glob(os.path.join(capas, "cont", "*.webp")):
+        if datetime.strptime(os.path.basename(p)[-18:-5], "%Y%m%d_%H%M") < limite:
+            os.remove(p)
     for p in glob.glob(os.path.join(capas, "ir_*.webp")) + glob.glob(os.path.join(capas, "vis_*.webp")):
         if datetime.strptime(os.path.basename(p)[-18:-5], "%Y%m%d_%H%M") < limite:
             os.remove(p)
@@ -68,8 +74,41 @@ def satelite(capas, horas):
     return nuevos
 
 
+def satelite_continente(capas, horas, max_por_corrida=8):
+    """Capas de toda Sudamérica (2 km, más livianas) para cuando se aleja el mapa.
+    Topes: canal 13. Visible: canal 2 del archivo multibanda (MCMIPF, ya a 2 km).
+    Hace como mucho `max_por_corrida` cuadros nuevos por capa en cada corrida, de los más nuevos a los más viejos,
+    para que la primera corrida no tarde demasiado (las siguientes completan los que falten)."""
+    os.makedirs(os.path.join(capas, "cont"), exist_ok=True)
+    nuevos = 0
+    for pref, canal, producto, var, func in (("ir", 13, "CMIPF", "CMI", mapa.png_topes),
+                                             ("vis", 2, "MCMIPF", "CMI_C02", mapa.png_visible_pleno)):
+        hechos = 0
+        try:
+            claves = envivo.ultimas_claves(canal, horas, producto=producto)
+        except Exception:
+            traceback.print_exc()
+            continue
+        for key in reversed(claves):
+            t = envivo._inicio(key)
+            path = os.path.join(capas, "cont", f"{pref}_{t:%Y%m%d_%H%M}.webp")
+            if os.path.exists(path):
+                continue
+            if hechos >= max_por_corrida:
+                break
+            try:
+                v, _ = mapa.leer_goes_mercator(key, canal, ANCHO_CONT, caja=mapa.CAJA_CONT, var=var)
+                _webp(func, v, path, CALIDAD["cont"])
+                hechos += 1
+                nuevos += 1
+                print(f"  continente {pref} {t:%d/%m %H:%M} UTC")
+            except Exception:
+                traceback.print_exc()
+    return nuevos
+
+
 def _campos_viento(t, f, cache):
-    ds = gfs.bajar_campos(t, f, [r"^UGRD:10 m above", r"^VGRD:10 m above", r"^GUST:surface"], cache, mapa.CAJA_MAPA)
+    ds = gfs.bajar_campos(t, f, [r"^UGRD:10 m above", r"^VGRD:10 m above", r"^GUST:surface"], cache, mapa.CAJA_CONT)
     return ds
 
 
@@ -93,23 +132,25 @@ def pronostico(capas, cache):
         t -= timedelta(hours=6)
     else:
         return None
-    marca = os.path.join(capas, f"pron_{t:%Y%m%d%H}.json")
+    marca = os.path.join(capas, f"pron_c_{t:%Y%m%d%H}.json")
     if not os.path.exists(marca):
         for p in glob.glob(os.path.join(capas, "pron_*")) + glob.glob(os.path.join(capas, "viento_*")):
             os.remove(p)
         print(f"  pronóstico GFS {t:%d/%m %H} UTC…")
-        lluvia, _ = gfs.pronostico(t, 72, cache, paso=3, caja=mapa.CAJA_MAPA)
+        lluvia, _ = gfs.pronostico(t, 72, cache, paso=3, caja=mapa.CAJA_CONT)
         pasos, viento = [], []
         for f in range(3, 73, 3):
             ti = t + timedelta(hours=f)
             sel = lluvia.sel(time=np.datetime64(ti))
             fn_ll = f"pron_{t:%Y%m%d%H}_{f:03d}.webp"
             _webp(mapa.png_lluvia, (sel.values, lluvia.latitude.values, lluvia.longitude.values),
-                  os.path.join(capas, fn_ll))
+                  os.path.join(capas, fn_ll), ancho=1000, caja=mapa.CAJA_CONT)
             ds = _campos_viento(t, f, cache)
             vel = np.hypot(ds["ugrd"], ds["vgrd"]).values * 3.6
             fn_vi = f"viento_{t:%Y%m%d%H}_{f:03d}.webp"
-            _webp(mapa.png_viento, (vel, ds.latitude.values, ds.longitude.values), os.path.join(capas, fn_vi))
+            _webp(mapa.png_viento, (vel, ds.latitude.values, ds.longitude.values), os.path.join(capas, fn_vi),
+                  ancho=1000, caja=mapa.CAJA_CONT)
+            ds = ds.isel(latitude=slice(None, None, PASO_VIENTO), longitude=slice(None, None, PASO_VIENTO))
             iso = ti.isoformat(timespec="minutes")
             pasos.append({"f": "capas/" + fn_ll, "v": "capas/" + fn_vi, "t": iso, "desde": (ti - timedelta(hours=3)).isoformat(timespec="minutes")})
             # datos por punto para el clic: ráfaga y lluvia en la grilla del viento
@@ -154,12 +195,19 @@ def actualizar(salida, horas, cache):
         pron = None
 
     def lista(pref):
-        return [{"f": "capas/" + os.path.basename(p), "a": "capas/hd/" + os.path.basename(p),
-                 "t": datetime.strptime(os.path.basename(p)[-18:-5], "%Y%m%d_%H%M").isoformat(timespec="minutes")}
-                for p in sorted(glob.glob(os.path.join(capas, f"{pref}_*.webp")))]
+        out = []
+        for p in sorted(glob.glob(os.path.join(capas, f"{pref}_*.webp"))):
+            b = os.path.basename(p)
+            d = {"f": "capas/" + b, "a": "capas/hd/" + b,
+                 "t": datetime.strptime(b[-18:-5], "%Y%m%d_%H%M").isoformat(timespec="minutes")}
+            if os.path.exists(os.path.join(capas, "cont", b)):
+                d["c"] = "capas/cont/" + b
+            out.append(d)
+        return out
 
-    c = mapa.CAJA_MAPA
+    c, k = mapa.CAJA_MAPA, mapa.CAJA_CONT
     datos = {"bounds": [[c["lat_min"], c["lon_min"]], [c["lat_max"], c["lon_max"]]],
+             "bounds_cont": [[k["lat_min"], k["lon_min"]], [k["lat_max"], k["lon_max"]]],
              "ir": lista("ir"), "vis": lista("vis"), "pron": pron,
              "lugares": LUGARES, "actualizado": _ahora().isoformat(timespec="minutes")}
     with open(os.path.join(salida, "capas.js"), "w", encoding="utf-8") as fh:

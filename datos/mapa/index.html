@@ -113,15 +113,20 @@ const VER = "2";
 const conVer = u => u ? u + "?v=" + VER : u;
 for (const k of ["ir", "vis"]) C[k].forEach(f => { f.f = conVer(f.f); f.a = conVer(f.a); });
 if (C.pron) C.pron.pasos.forEach(f => { f.f = conVer(f.f); f.v = conVer(f.v); });
-const B = L.latLngBounds(C.bounds);
-const mapa = L.map("mapa", { zoomControl:true, minZoom:3, maxZoom:10, worldCopyJump:false, zoomSnap:0.25 });
+const B = L.latLngBounds(C.bounds);                       // franja central en alta definición
+const BC = L.latLngBounds(C.bounds_cont || C.bounds);     // toda Sudamérica: alejamiento máximo
+const mapa = L.map("mapa", { zoomControl:true, minZoom:2, maxZoom:10, worldCopyJump:false, zoomSnap:0.25,
+  maxBounds: BC.pad(0.08), maxBoundsViscosity: 0.9 });
 // encuadre inicial: la imagen de la franja llena todo el recuadro (como "cover").
 // Si el recuadro cambia de tamaño (por ejemplo dentro de la web, que lo carga tarde), se vuelve a encuadrar
 // mientras la persona no haya movido el mapa.
 let tocado = false;
 function encuadrar() {
   const t = mapa.getSize();
-  if (!t.x || !t.y || tocado) return;
+  if (!t.x || !t.y) return;
+  // no se puede alejar más que toda Sudamérica
+  mapa.setMinZoom(Math.floor(mapa.getBoundsZoom(BC, false) * 4) / 4);
+  if (tocado) return;
   if (t.x >= t.y) {          // recuadro apaisado (compu): la franja tapa todo el recuadro
     mapa.setView(B.getCenter(), mapa.getBoundsZoom(B, true), { animate:false });
   } else {                    // recuadro vertical (celular): provincia de Buenos Aires y alrededores
@@ -183,7 +188,7 @@ const LEY = {
 };
 const PASO_MS = { ir:500, vis:500, pron:1100, viento:2600 };   // viento más lento: las partículas necesitan tiempo para dibujarse
 
-let capa = "ir", i = 0, jugando = true, reloj = null, overlay = null, vel = 1, velLayer = null;
+let capa = "ir", i = 0, jugando = true, reloj = null, overlay = null, vel = 1, velLayer = null, overlayCont = null;
 const cache = {};
 const precargar = lista => lista.forEach(f => { for (const u of [f.f, f.v]) if (u && !cache[u]) { const im = new Image(); im.src = u; cache[u] = im; } });
 const esPron = () => capa === "pron" || capa === "viento";
@@ -234,6 +239,7 @@ function mostrar(k) {
   i = Math.max(0, Math.min(k, lista.length - 1));
   const f = lista[i];
   if (overlay) overlay.setUrl(capa === "viento" ? f.v : (!jugando && f.a ? f.a : f.f));
+  continente();
   if (capa === "viento" && VIENTO && velLayer) velLayer.setData(VIENTO[i].uv);
   const d = local(f.t);
   let hora, sub;
@@ -250,14 +256,30 @@ function mostrar(k) {
   if (popup && mapa.hasLayer(popup)) actualizarPopup();
 }
 
+// Satélite de toda Sudamérica: sólo se carga cuando el mapa muestra algo fuera de la franja central
+let contPrecargado = {};
+function continente() {
+  const lista = cuadros(), f = lista[i];
+  const hace = !esPron() && f && f.c && !B.contains(mapa.getBounds());
+  if (!hace) { if (overlayCont && mapa.hasLayer(overlayCont)) mapa.removeLayer(overlayCont); return; }
+  if (!contPrecargado[capa]) { contPrecargado[capa] = true; lista.forEach(x => { if (x.c && !cache[x.c]) { const im = new Image(); im.src = x.c; cache[x.c] = im; } }); }
+  if (!overlayCont) overlayCont = L.imageOverlay(f.c, BC, { interactive:false, opacity: document.getElementById("opacidad").value / 100 });
+  overlayCont.options.pane = capa === "vis" ? "pane-visible" : "overlayPane";
+  if (!mapa.hasLayer(overlayCont)) { overlayCont.addTo(mapa); }
+  overlayCont.setUrl(f.c);
+  overlayCont.bringToBack();
+}
+mapa.on("moveend", () => continente());
+
 function ponerCapa(c) {
   capa = c;
   document.querySelectorAll("[data-capa]").forEach(b => b.setAttribute("aria-pressed", b.dataset.capa === c));
   if (overlay) mapa.removeLayer(overlay);
+  if (overlayCont) { mapa.removeLayer(overlayCont); overlayCont = null; }
   if (velLayer) { mapa.removeLayer(velLayer); velLayer = null; }
   const lista = cuadros();
   const url = lista.length ? (c === "viento" ? lista[0].v : lista[0].f) : "";
-  overlay = L.imageOverlay(url, B, { pane: c === "vis" ? "pane-visible" : "overlayPane",
+  overlay = L.imageOverlay(url, esPron() ? BC : B, { pane: c === "vis" ? "pane-visible" : "overlayPane",
     opacity: document.getElementById("opacidad").value / 100, interactive:false }).addTo(mapa);
   precargar(lista);
   armarLinea(); leyenda();
@@ -310,7 +332,7 @@ document.getElementById("play").onclick = () => play(!jugando);
 document.querySelectorAll("[data-vel]").forEach(b => b.onclick = () => {
   vel = +b.dataset.vel; document.querySelectorAll("[data-vel]").forEach(x => x.setAttribute("aria-pressed", x === b));
 });
-document.getElementById("opacidad").oninput = e => overlay && overlay.setOpacity(e.target.value / 100);
+document.getElementById("opacidad").oninput = e => { if (overlay) overlay.setOpacity(e.target.value / 100); if (overlayCont) overlayCont.setOpacity(e.target.value / 100); };
 document.addEventListener("keydown", e => {
   if (e.key === " ") { e.preventDefault(); play(!jugando); }
   if (e.key === "ArrowRight") { play(false); mostrar(i + 1); }

@@ -16,6 +16,8 @@ from .envivo import BUCKET, _inicio
 
 # Franja central: del Pacífico (Chile) al Atlántico, de Córdoba/Santa Fe al norte patagónico
 CAJA_MAPA = dict(lon_min=-76.0, lon_max=-52.0, lat_min=-43.0, lat_max=-29.0)
+# Toda Sudamérica (alejamiento máximo del mapa): capas más gruesas debajo de la franja en alta definición
+CAJA_CONT = dict(lon_min=-95.0, lon_max=-28.0, lat_min=-58.0, lat_max=16.0)
 _R = 6378137.0
 
 
@@ -23,9 +25,9 @@ def _merc_y(lat):
     return _R * np.log(np.tan(np.pi / 4 + np.deg2rad(lat) / 2))
 
 
-def grilla_mercator(ancho: int):
-    """lat/lon de cada píxel de una imagen de `ancho` px que cubre CAJA_MAPA en Web Mercator."""
-    c = CAJA_MAPA
+def grilla_mercator(ancho: int, caja: dict | None = None):
+    """lat/lon de cada píxel de una imagen de `ancho` px que cubre la caja (CAJA_MAPA) en Web Mercator."""
+    c = caja or CAJA_MAPA
     x0, x1 = np.deg2rad(c["lon_min"]) * _R, np.deg2rad(c["lon_max"]) * _R
     y0, y1 = _merc_y(c["lat_min"]), _merc_y(c["lat_max"])
     alto = int(round(ancho * (y1 - y0) / (x1 - x0)))
@@ -39,9 +41,9 @@ def grilla_mercator(ancho: int):
 _IDX = {}
 
 
-def _indices(h, canal, ancho):
+def _indices(h, canal, ancho, caja=None):
     """Fila/columna (fraccionarias) del disco completo para cada píxel de la grilla Mercator."""
-    clave = (canal, ancho)
+    clave = (canal, ancho, tuple(sorted((caja or CAJA_MAPA).items())))
     if clave in _IDX:
         return _IDX[clave]
     p = h["goes_imager_projection"].attrs
@@ -50,8 +52,10 @@ def _indices(h, canal, ancho):
     sweep = sweep.decode() if isinstance(sweep, bytes) else str(sweep)
     proj = Proj(proj="geos", h=alt, lon_0=float(p["longitude_of_projection_origin"][0]), sweep=sweep,
                 a=float(p["semi_major_axis"][0]), b=float(p["semi_minor_axis"][0]))
-    lon, lat = grilla_mercator(ancho)
+    lon, lat = grilla_mercator(ancho, caja)
     X, Y = proj(lon, lat)
+    X = np.where(np.abs(X) > 1e20, np.nan, X)   # fuera del disco visible
+    Y = np.where(np.abs(Y) > 1e20, np.nan, Y)
     xs, ys = h["x"], h["y"]
     sx, ox = xs.attrs["scale_factor"][0], xs.attrs["add_offset"][0]
     sy, oy = ys.attrs["scale_factor"][0], ys.attrs["add_offset"][0]
@@ -67,7 +71,7 @@ def _indices(h, canal, ancho):
     return _IDX[clave]
 
 
-def leer_goes_mercator(key: str, canal: int, anchos):
+def leer_goes_mercator(key: str, canal: int, anchos, caja: dict | None = None, var: str = "CMI"):
     """Valores del canal (reflectancia 0-1 o °C) remuestreados a una o varias grillas Mercator.
 
     Interpolación bilineal; si la salida es más gruesa que el dato nativo, primero se suaviza
@@ -77,10 +81,10 @@ def leer_goes_mercator(key: str, canal: int, anchos):
     anchos = [anchos] if unico else list(anchos)
     with fsspec.open(f"{BUCKET}/{key}", block_size=8 * 2**20, cache_type="bytes").open() as f:
         with h5py.File(f, "r") as h:
-            idx = [_indices(h, canal, a) for a in anchos]
+            idx = [_indices(h, canal, a, caja) for a in anchos]
             r0 = min(i[3] for i in idx); r1 = max(i[4] for i in idx)
             c0 = min(i[5] for i in idx); c1 = max(i[6] for i in idx)
-            d = h["CMI"]
+            d = h[var]
             crudo = d[r0:r1, c0:c1]
             fill = d.attrs.get("_FillValue", [None])[0]
             esc, off = d.attrs["scale_factor"][0], d.attrs["add_offset"][0]
@@ -159,7 +163,7 @@ _LL_NIV = [0.5, 2, 5, 10, 20, 30, 50, 75]
 _LL_COL = ["#9dc3ea", "#73a6de", "#4c88cf", "#2f6bb8", "#1f5299", "#163d78", "#7b1fa2", "#c2185b"]
 
 
-def png_lluvia(mm, lat, lon, path, ancho=700):
+def png_lluvia(mm, lat, lon, path, ancho=700, caja=None):
     """Campo de lluvia GFS (grilla regular) -> PNG Mercator suavizado."""
     from scipy.interpolate import RegularGridInterpolator
     la = np.asarray(lat)
@@ -168,7 +172,7 @@ def png_lluvia(mm, lat, lon, path, ancho=700):
     if la[0] > la[-1]:
         la, v = la[::-1], v[::-1]
     f = RegularGridInterpolator((la, lo), v, bounds_error=False, fill_value=0.0)
-    LON, LAT = grilla_mercator(ancho)
+    LON, LAT = grilla_mercator(ancho, caja)
     z = f(np.stack([LAT.ravel(), LON.ravel()], -1)).reshape(LAT.shape)
     rgba = np.zeros(z.shape + (4,), np.uint8)
     for k, nivel in enumerate(_LL_NIV):
@@ -188,7 +192,7 @@ _VI_COL = ["#3a5fcd", "#3a9bd9", "#3fbf9b", "#7ccf4f", "#e6d23a", "#f39a2b", "#e
 LEYENDA_VIENTO = list(zip(_VI_NIV, _VI_COL))
 
 
-def png_viento(vel_kmh, lat, lon, path, ancho=700):
+def png_viento(vel_kmh, lat, lon, path, ancho=700, caja=None):
     """Velocidad del viento (grilla regular) -> PNG Mercator suave, semitransparente."""
     import matplotlib.colors as mcolors
     from scipy.interpolate import RegularGridInterpolator
@@ -196,7 +200,7 @@ def png_viento(vel_kmh, lat, lon, path, ancho=700):
     if la[0] > la[-1]:
         la, v = la[::-1], v[::-1]
     f = RegularGridInterpolator((la, lo), v, bounds_error=False, fill_value=0.0)
-    LON, LAT = grilla_mercator(ancho)
+    LON, LAT = grilla_mercator(ancho, caja)
     z = f(np.stack([LAT.ravel(), LON.ravel()], -1)).reshape(LAT.shape)
     cmap = mcolors.LinearSegmentedColormap.from_list(
         "viento", [(n / _VI_NIV[-1], c) for n, c in zip(_VI_NIV, _VI_COL)])
