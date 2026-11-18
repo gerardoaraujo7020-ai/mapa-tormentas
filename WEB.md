@@ -7,7 +7,7 @@ estática: `index.html` + imágenes. No necesita servidor propio ni base de dato
 - **Topes nubosos** GOES-19 (infrarrojo realzado), últimas 3 h cada 10 min, de día y de noche.
 - **Visible** GOES-19, últimas 3 h cada 10 min (sólo de día).
 - **Lluvia pronosticada** GFS, próximas 72 h en pasos de 3 h.
-- Mapa base oscuro CARTO/OpenStreetMap (gratis con la atribución que ya figura abajo a la derecha).
+- Mapa base oscuro de Esri (gratis, sin clave, con la atribución que ya figura abajo a la derecha).
 
 Se puede abrir una capa directa con `?capa=ir`, `?capa=vis` o `?capa=pron`.
 
