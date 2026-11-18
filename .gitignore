@@ -1,7 +1,7 @@
-cache/
-salida/
-mapa/
-en_vivo/
-publicado/
+/cache/
+/salida/
+/mapa/
+/en_vivo/
+/publicado/
 __pycache__/
 *.pyc

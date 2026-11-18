@@ -176,6 +176,8 @@ def main():
             print(f"  {n} imágenes satelitales nuevas → {os.path.abspath(os.path.join(a.salida, 'index.html'))}")
         except Exception:
             traceback.print_exc()
+            if a.una_vez:
+                raise SystemExit(1)   # que GitHub Actions marque la corrida como fallida
         if a.una_vez:
             break
         time.sleep(a.cada * 60)
