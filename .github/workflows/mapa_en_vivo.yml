@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  actions: write     # para volver a lanzarse sola (ver el último paso)
 
 concurrency:
   group: nubosidad
@@ -18,8 +19,11 @@ concurrency:
 jobs:
   actualizar:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
+      - name: Anotar la hora de inicio
+        run: echo "INICIO=$(date +%s)" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v4
 
       # recupera los cuadros ya publicados para sólo procesar los nuevos
@@ -53,3 +57,15 @@ jobs:
           publish_branch: gh-pages
           force_orphan: true      # no acumula historial de imágenes
           commit_message: "Nubosidad en vivo"
+
+      # GitHub a veces no dispara el horario (schedule) en repos nuevos o lo atrasa mucho.
+      # Por eso cada corrida espera a completar 10 minutos y lanza la siguiente.
+      # Para frenar la cadena: Actions > "Mapa del tiempo en vivo" > "..." > Disable workflow.
+      - name: Programar la próxima actualización (en 10 minutos)
+        if: always() && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          espera=$(( 600 - ($(date +%s) - $INICIO) ))
+          [ "$espera" -gt 0 ] && sleep "$espera"
+          gh workflow run mapa_en_vivo.yml --repo "$GITHUB_REPOSITORY" --ref main
