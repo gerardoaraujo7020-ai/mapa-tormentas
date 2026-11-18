@@ -29,9 +29,8 @@ ANCHO_HD = {2: 3200, 13: 1800}
 CALIDAD = {"baja": 74, "alta": 84}
 LUGARES = [("Benito Juárez", -37.68, -59.80), ("Tandil", -37.32, -59.13), ("Necochea", -38.55, -58.74),
            ("Tres Arroyos", -38.38, -60.28), ("Azul", -36.78, -59.86), ("Olavarría", -36.89, -60.32),
-           ("Bahía Blanca", -38.72, -62.27), ("Mar del Plata", -38.00, -57.56), ("La Plata", -34.92, -57.95),
-           ("Junín", -34.59, -60.95), ("Pehuajó", -35.81, -61.90), ("Pergamino", -33.89, -60.57),
-           ("Santa Rosa", -36.62, -64.29), ("Rosario", -32.95, -60.65), ("Montevideo", -34.90, -56.16)]
+           ("Bahía Blanca", -38.72, -62.27), ("Junín", -34.59, -60.95), ("Pehuajó", -35.81, -61.90), ("Pergamino", -33.89, -60.57),
+           ]
 
 
 def _ahora():
