@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="lib/leaflet-velocity.min.css">
 <style>
   :root { --panel:rgba(16,20,26,.9); --tinta:#eef2f6; --tinta2:#a9b4bf; --borde:rgba(255,255,255,.14); --acento:#4c9aff; --pista:rgba(255,255,255,.10); }
-  html, body { height:100%; margin:0; background:#0b0f14; color:var(--tinta); font:14px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  html, body { height:100%; margin:0; overflow:hidden; background:#0b0f14; color:var(--tinta); font:14px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
   #mapa { position:absolute; inset:0; background:#0b0f14; }
   .leaflet-container { background:#0b0f14; font:inherit; }
   .leaflet-pane.pane-visible { mix-blend-mode:screen; }   /* nubes blancas sobre el mapa oscuro */
@@ -59,7 +59,8 @@
     .marca { top:8px; left:8px; padding:5px 9px; }
     .marca b { font-size:12px; }
     .reloj { top:58px; padding:4px 12px; }
-    .reloj b { font-size:16px; }
+    .reloj b { font-size:16px; white-space:nowrap; }
+    .leaflet-control-attribution { max-width:100vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:9px; }
     .reloj span { font-size:11px; white-space:nowrap; }
     .panel { bottom:8px; padding:7px 8px; width:calc(100% - 16px); }
     .fila { gap:5px; flex-wrap:nowrap; }
