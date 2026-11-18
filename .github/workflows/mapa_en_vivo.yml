@@ -5,7 +5,7 @@ name: Mapa del tiempo en vivo
 
 on:
   schedule:
-    - cron: "*/10 * * * *"   # GitHub puede demorar unos minutos cada disparo
+    - cron: "4-59/10 * * * *"  # cada 10 min (a los :04, :14…); GitHub puede demorar unos minutos
   workflow_dispatch: {}       # botón para correrlo a mano
 
 permissions:
