@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Mapa del tiempo · El Viejo Viento</title>
+<link rel="stylesheet" href="lib/leaflet.css">
+<link rel="stylesheet" href="lib/leaflet-velocity.min.css">
+<style>
+  :root { --panel:rgba(16,20,26,.9); --tinta:#eef2f6; --tinta2:#a9b4bf; --borde:rgba(255,255,255,.14); --acento:#4c9aff; --pista:rgba(255,255,255,.10); }
+  html, body { height:100%; margin:0; overflow:hidden; background:#0b0f14; color:var(--tinta); font:14px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  #mapa { position:absolute; inset:0; background:#0b0f14; }
+  .leaflet-container { background:#0b0f14; font:inherit; }
+  .leaflet-pane.pane-visible { mix-blend-mode:screen; }   /* nubes blancas sobre el mapa oscuro */
+  .leaflet-control-attribution { background:rgba(0,0,0,.55)!important; color:#bbb!important; font-size:10px; }
+  .leaflet-control-attribution a { color:#ddd!important; }
+  .caja { background:var(--panel); border:1px solid var(--borde); border-radius:12px; backdrop-filter:blur(6px); }
+  .marca { position:absolute; top:12px; left:12px; z-index:1000; padding:8px 12px; }
+  .marca b { display:block; font-size:14px; letter-spacing:.4px; }
+  .marca span { color:var(--tinta2); font-size:12px; }
+  .reloj { position:absolute; top:12px; left:50%; transform:translateX(-50%); z-index:1000; padding:6px 16px; text-align:center; pointer-events:none; }
+  .reloj b { display:block; font-size:20px; font-variant-numeric:tabular-nums; letter-spacing:.3px; }
+  .reloj span { color:var(--tinta2); font-size:12px; }
+  .panel { position:absolute; left:50%; transform:translateX(-50%); bottom:20px; z-index:1000; width:min(900px, calc(100% - 24px)); padding:10px 12px; }
+  .fila { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .fila + .fila { margin-top:8px; }
+  .chip { border:1px solid var(--borde); background:transparent; color:var(--tinta); border-radius:999px; padding:6px 12px; font:inherit; cursor:pointer; }
+  .chip[aria-pressed="true"] { background:var(--acento); border-color:var(--acento); color:#05101e; font-weight:600; }
+  .chip.chico { padding:3px 9px; font-size:12px; }
+  #play { width:40px; height:40px; border-radius:50%; border:0; background:var(--acento); color:#05101e; font-size:15px; cursor:pointer; flex:none; }
+  .op { display:flex; align-items:center; gap:6px; color:var(--tinta2); font-size:12px; margin-left:auto; }
+  .op input { width:90px; accent-color:var(--acento); }
+  /* Línea de tiempo */
+  .linea { flex:1 1 300px; min-width:0; }
+  .dias { display:flex; height:16px; font-size:11px; color:var(--tinta2); }
+  .dias div { overflow:hidden; white-space:nowrap; border-left:1px solid var(--borde); padding-left:4px; }
+  .dias div:first-child { border-left:0; padding-left:0; }
+  .pista { display:flex; height:16px; gap:2px; cursor:pointer; }
+  .pista i { flex:1; background:var(--pista); border-radius:3px; transition:background .15s; }
+  .pista i.pasado { background:rgba(76,154,255,.38); }
+  .pista i.actual { background:var(--acento); box-shadow:0 0 0 2px rgba(76,154,255,.35); }
+  .pista i:hover { background:rgba(255,255,255,.35); }
+  .horas { position:relative; height:15px; font-size:10.5px; color:var(--tinta2); font-variant-numeric:tabular-nums; }
+  .horas span { position:absolute; transform:translateX(-50%); white-space:nowrap; }
+  .vel { display:flex; gap:4px; }
+  .leyenda { display:flex; align-items:center; gap:6px; color:var(--tinta2); font-size:11.5px; flex-wrap:wrap; }
+  .barra-color { display:flex; height:9px; border-radius:3px; overflow:hidden; min-width:200px; }
+  .barra-color i { flex:1; }
+  .marcas { display:flex; justify-content:space-between; min-width:200px; font-size:10px; }
+  .escala { display:inline-flex; flex-direction:column; gap:1px; }
+  .nota { color:var(--tinta2); font-size:11px; }
+  .zoom-bajo .secundaria { display:none; }
+  .lugar span { position:absolute; top:-8px; }
+  .lugar { color:#fff; font-size:11px; font-weight:600; text-shadow:0 0 3px #000,0 0 2px #000; white-space:nowrap; }
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip { background:#151a21; color:var(--tinta); }
+  .leaflet-popup-content { margin:10px 12px; font-size:13px; line-height:1.45; }
+  .leaflet-popup-content b { font-size:14px; }
+  @media (max-width:600px) {
+    .marca { top:8px; left:8px; padding:5px 9px; }
+    .marca b { font-size:12px; }
+    .reloj { top:58px; padding:4px 12px; }
+    .reloj b { font-size:16px; white-space:nowrap; }
+    .leaflet-control-attribution { max-width:100vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:9px; }
+    .reloj span { font-size:11px; white-space:nowrap; }
+    .panel { bottom:8px; padding:7px 8px; width:calc(100% - 16px); }
+    .fila { gap:5px; flex-wrap:nowrap; }
+    .fila + .fila { margin-top:6px; }
+    .chip { padding:4px 9px; font-size:12.5px; white-space:nowrap; }
+    #play { width:32px; height:32px; font-size:12px; }
+    .op, .vel, .leyenda .nota { display:none; }
+    .barra-color, .marcas { min-width:150px; }
+    .leyenda { font-size:10.5px; flex-wrap:nowrap; }
+  }
+  @media (max-width:360px) { .chip { padding:4px 7px; font-size:11.5px; } }
+</style>
+</head>
+<body>
+<div id="mapa"></div>
+<div class="marca caja"><b>EL VIEJO VIENTO</b><span id="actualizado">Mapa del tiempo</span></div>
+<div class="reloj caja"><b id="hora">–</b><span id="sub">–</span></div>
+<div class="panel caja">
+  <div class="fila" role="group" aria-label="Capa">
+    <button class="chip" data-capa="ir" aria-pressed="true">Topes nubosos</button>
+    <button class="chip" data-capa="vis" aria-pressed="false">Visible</button>
+    <button class="chip" data-capa="pron" aria-pressed="false">Lluvia</button>
+    <button class="chip" data-capa="viento" aria-pressed="false">Viento</button>
+    <label class="op">Opacidad <input id="opacidad" type="range" min="20" max="100" value="90"></label>
+  </div>
+  <div class="fila">
+    <button id="play" aria-label="Animar o pausar">⏸</button>
+    <div class="linea">
+      <div class="dias" id="dias"></div>
+      <div class="pista" id="pista" aria-label="Línea de tiempo"></div>
+      <div class="horas" id="horas"></div>
+    </div>
+    <div class="vel" role="group" aria-label="Velocidad">
+      <button class="chip chico" data-vel="1.7">Lento</button>
+      <button class="chip chico" data-vel="1" aria-pressed="true">Normal</button>
+      <button class="chip chico" data-vel="0.55">Rápido</button>
+    </div>
+  </div>
+  <div class="fila"><div id="leyenda" class="leyenda"></div></div>
+</div>
+
+<script src="lib/leaflet.js"></script>
+<script src="lib/leaflet-velocity.min.js"></script>
+<script src="limites.js"></script>
+<script>document.write('<script src="capas.js?' + Date.now() + '"><\/script>');</script>  <!-- siempre la versión más nueva -->
+<script>
+const C = window.CAPAS;
+// Versión de las imágenes: subirla cuando cambie el estilo de las capas, para que el navegador no muestre las viejas
+const VER = "2";
+const conVer = u => u ? u + "?v=" + VER : u;
+for (const k of ["ir", "vis"]) C[k].forEach(f => { f.f = conVer(f.f); f.a = conVer(f.a); });
+if (C.pron) C.pron.pasos.forEach(f => { f.f = conVer(f.f); f.v = conVer(f.v); });
+const B = L.latLngBounds(C.bounds);                       // franja central en alta definición
+const BC = L.latLngBounds(C.bounds_cont || C.bounds);     // toda Sudamérica: alejamiento máximo
+const mapa = L.map("mapa", { zoomControl:true, minZoom:2, maxZoom:10, worldCopyJump:false, zoomSnap:0.25,
+  maxBounds: BC.pad(0.08), maxBoundsViscosity: 0.9 });
+// encuadre inicial: la imagen de la franja llena todo el recuadro (como "cover").
+// Si el recuadro cambia de tamaño (por ejemplo dentro de la web, que lo carga tarde), se vuelve a encuadrar
+// mientras la persona no haya movido el mapa.
+let tocado = false;
+function encuadrar() {
+  const t = mapa.getSize();
+  if (!t.x || !t.y) return;
+  // no se puede alejar más que toda Sudamérica
+  mapa.setMinZoom(Math.floor(mapa.getBoundsZoom(BC, false) * 4) / 4);
+  if (tocado) return;
+  if (t.x >= t.y) {          // recuadro apaisado (compu): la franja tapa todo el recuadro
+    mapa.setView(B.getCenter(), mapa.getBoundsZoom(B, true), { animate:false });
+  } else {                    // recuadro vertical (celular): provincia de Buenos Aires y alrededores
+    mapa.fitBounds([[-41.5, -66], [-32, -55]], { paddingTopLeft:[0, 90], paddingBottomRight:[0, 120], animate:false });
+  }
+}
+mapa.setView(B.getCenter(), 5);
+encuadrar();
+new ResizeObserver(() => { mapa.invalidateSize({ animate:false }); encuadrar(); }).observe(document.getElementById("mapa"));
+mapa.getContainer().addEventListener("pointerdown", () => { tocado = true; }, { once:true });
+mapa.getContainer().addEventListener("wheel", () => { tocado = true; }, { once:true });
+mapa.zoomControl.setPosition("topright");
+window.mapa = mapa;
+
+// Mapa base oscuro (Esri Dark Gray, gratis sin clave, con atribución) + etiquetas arriba de las nubes
+mapa.createPane("pane-visible").classList.add("pane-visible");
+mapa.getPane("pane-visible").style.zIndex = 350;
+mapa.createPane("pane-etiquetas").style.zIndex = 620;
+mapa.getPane("pane-etiquetas").style.pointerEvents = "none";
+L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
+  maxZoom:16,
+  attribution:'Mapa base &copy; Esri, HERE, Garmin, &copy; OpenStreetMap · Satélite y modelo: NOAA GOES-19 / GFS'
+}).addTo(mapa);
+L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+  { maxZoom:16, pane:"pane-etiquetas" }).addTo(mapa);
+L.geoJSON(window.LIMITES, { pane:"pane-etiquetas", interactive:false,
+  style:f => ({ color: f.properties.nombre === "Buenos Aires" ? "#ffd54f" : "#8fa3b8",
+                weight: f.properties.nombre === "Buenos Aires" ? 1.6 : 0.8, opacity:.9, fill:false }) }).addTo(mapa);
+const IZQ = new Set(["Olavarría", "Tres Arroyos"]);
+const SECUNDARIAS = new Set(["Olavarría", "Pergamino", "Pehuajó", "Tres Arroyos", "Azul", "Junín"]);
+for (const [n, la, lo] of C.lugares) {
+  const sec = SECUNDARIAS.has(n) ? " secundaria" : "";
+  L.circleMarker([la, lo], { pane:"pane-etiquetas", className:sec.trim(), radius:3, color:"#000", weight:1, fillColor:"#fff", fillOpacity:1 }).addTo(mapa);
+  L.marker([la, lo], { pane:"pane-etiquetas", interactive:false,
+    icon:L.divIcon({ className:"lugar" + sec, iconSize:[0, 0], iconAnchor:[0, 0],
+                    html:`<span style="${IZQ.has(n) ? "right" : "left"}:6px">${n}</span>` }) }).addTo(mapa);
+}
+const zoomClase = () => mapa.getContainer().classList.toggle("zoom-bajo", mapa.getZoom() < 5.5);
+mapa.on("zoomend", zoomClase); zoomClase();
+
+// ---------- fechas en hora argentina ----------
+const DIAS = ["dom","lun","mar","mié","jue","vie","sáb"];
+const p2 = x => String(x).padStart(2, "0");
+const local = iso => new Date(new Date(iso + "Z").getTime() - 3 * 3600e3);   // usar getUTC* sobre esto
+const fDia = d => `${DIAS[d.getUTCDay()]} ${p2(d.getUTCDate())}/${p2(d.getUTCMonth() + 1)}`;
+const fHora = d => `${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}`;
+
+// ---------- capas ----------
+const TOPES = [[30,"#202020"],[10,"#6e6e6e"],[0,"#a8a8a8"],[-10,"#9fd8ff"],[-20,"#3f9ae8"],[-30,"#1f4fbf"],[-35,"#2fbf4a"],
+               [-45,"#137a2c"],[-50,"#ffe83b"],[-56,"#ffa21a"],[-62,"#ff4a12"],[-68,"#c4100c"],[-74,"#6e0606"],[-78,"#ff4dff"],[-84,"#f2f2f2"]];
+const LEY = {
+  ir:  { titulo:"Tope de nube (°C)", stops:TOPES.map(([v, c]) => [c, v]), marcas:[30, 0, -30, -50, -70, -84],
+         nota:"Gris: nubes bajas. Azul y verde: nubes medias y altas. Amarillo a rojo: tormentas. Magenta y blanco: topes extremos." },
+  vis: { titulo:"Visible", stops:[["#000","sin nubes"],["#777",""],["#fff","nubes"]], marcas:["sin nubes", "nubes"], nota:"Sólo de día. De noche mirá los topes nubosos." },
+  pron:{ titulo:"Lluvia en 3 h (mm)", stops:C.pron ? C.pron.leyenda.map(([v, c]) => [c, v]) : [], marcas:null,
+         nota:"Pronóstico GFS. Tocá el mapa para ver lluvia, viento y ráfagas en ese punto." },
+  viento:{ titulo:"Viento a 10 m (km/h)", stops:C.pron ? C.pron.leyenda_viento.map(([v, c]) => [c, v]) : [], marcas:null,
+         nota:"Las líneas muestran hacia dónde sopla. Tocá el mapa para ver dirección y ráfagas." }
+};
+const PASO_MS = { ir:500, vis:500, pron:1100, viento:2600 };   // viento más lento: las partículas necesitan tiempo para dibujarse
+
+let capa = "ir", i = 0, jugando = true, reloj = null, overlay = null, vel = 1, velLayer = null, overlayCont = null;
+const cache = {};
+const precargar = lista => lista.forEach(f => { for (const u of [f.f, f.v]) if (u && !cache[u]) { const im = new Image(); im.src = u; cache[u] = im; } });
+const esPron = () => capa === "pron" || capa === "viento";
+const cuadros = () => esPron() ? (C.pron ? C.pron.pasos : []) : C[capa];
+
+// viento: datos cargados a demanda
+let VIENTO = null;
+function cargarViento(cb) {
+  if (window.VIENTO) { VIENTO = window.VIENTO; return cb(); }
+  if (!C.pron) return;
+  const s = document.createElement("script"); s.src = C.pron.viento_js;
+  s.onload = () => { VIENTO = window.VIENTO; cb(); }; document.head.appendChild(s);
+}
+
+function leyenda() {
+  const l = LEY[capa];
+  const barra = l.stops.map(([c]) => `<i style="background:${c}"></i>`).join("");
+  const m = l.marcas || l.stops.map(s => s[1]).filter((_, k, a) => k === 0 || k === a.length - 1 || k % 2 === 0);
+  const extra = esPron() && C.pron ? ` Corrida ${fDia(local(C.pron.corrida))} ${fHora(local(C.pron.corrida))} h.` : "";
+  document.getElementById("leyenda").innerHTML =
+    `<span>${l.titulo}</span><span class="escala"><span class="barra-color">${barra}</span>` +
+    `<span class="marcas">${m.map(x => `<span>${x}</span>`).join("")}</span></span>` +
+    `<span class="nota">${l.nota}${extra}</span>`;
+}
+
+// ---------- línea de tiempo tipo Windy ----------
+function armarLinea() {
+  const lista = cuadros(), n = lista.length;
+  const pista = document.getElementById("pista"), dias = document.getElementById("dias"), horas = document.getElementById("horas");
+  pista.innerHTML = lista.map((_, k) => `<i data-k="${k}" title=""></i>`).join("");
+  // días: agrupar cuadros por fecha local
+  const grupos = [];
+  lista.forEach(f => { const d = fDia(local(f.t)); if (!grupos.length || grupos[grupos.length - 1].d !== d) grupos.push({ d, n:0 }); grupos[grupos.length - 1].n++; });
+  dias.innerHTML = grupos.map(g => `<div style="flex:${g.n}">${g.d}</div>`).join("");
+  // horas: marcas espaciadas para que no se pisen
+  const angosto = window.innerWidth < 600;
+  const cada = esPron() ? (n > 16 ? (angosto ? 4 : 2) : 1) : Math.max(1, Math.round(n / (angosto ? 4 : 7)));
+  horas.innerHTML = lista.map((f, k) => (k % cada === 0) ?
+    `<span style="left:${(k + .5) / n * 100}%">${esPron() ? p2(local(f.t).getUTCHours()) + " h" : fHora(local(f.t))}</span>` : "").join("");
+  pista.querySelectorAll("i").forEach(el => el.onclick = () => { play(false); mostrar(+el.dataset.k); });
+}
+function marcarLinea() {
+  document.querySelectorAll("#pista i").forEach((el, k) => { el.classList.toggle("actual", k === i); el.classList.toggle("pasado", k < i); });
+}
+
+function mostrar(k) {
+  const lista = cuadros(); if (!lista.length) { document.getElementById("hora").textContent = "sin datos"; return; }
+  i = Math.max(0, Math.min(k, lista.length - 1));
+  const f = lista[i];
+  if (overlay) overlay.setUrl(capa === "viento" ? f.v : (!jugando && f.a ? f.a : f.f));
+  continente();
+  if (capa === "viento" && VIENTO && velLayer) velLayer.setData(VIENTO[i].uv);
+  const d = local(f.t);
+  let hora, sub;
+  if (capa === "pron") { const d0 = local(f.desde); hora = `${fDia(d)} · ${p2(d0.getUTCHours())} a ${p2(d.getUTCHours())} h`; sub = "Lluvia pronosticada en esas 3 horas"; }
+  else if (capa === "viento") { hora = `${fDia(d)} · ${p2(d.getUTCHours())} h`; sub = "Viento pronosticado"; }
+  else {
+    hora = `${fDia(d)} · ${fHora(d)} h`;
+    const min = Math.round((Date.now() - new Date(f.t + "Z").getTime()) / 60000);
+    sub = "Satélite GOES-19 · " + (min < 120 ? `hace ${min} min` : `hace ${Math.round(min / 60)} h`) + (i === lista.length - 1 ? " · última imagen" : "");
+  }
+  document.getElementById("hora").textContent = hora;
+  document.getElementById("sub").textContent = sub;
+  marcarLinea();
+  if (popup && mapa.hasLayer(popup)) actualizarPopup();
+}
+
+// Satélite de toda Sudamérica: sólo se carga cuando el mapa muestra algo fuera de la franja central
+let contPrecargado = {};
+function continente() {
+  const lista = cuadros(), f = lista[i];
+  const hace = !esPron() && f && f.c && !B.contains(mapa.getBounds());
+  if (!hace) { if (overlayCont && mapa.hasLayer(overlayCont)) mapa.removeLayer(overlayCont); return; }
+  if (!contPrecargado[capa]) { contPrecargado[capa] = true; lista.forEach(x => { if (x.c && !cache[x.c]) { const im = new Image(); im.src = x.c; cache[x.c] = im; } }); }
+  if (!overlayCont) overlayCont = L.imageOverlay(f.c, BC, { interactive:false, opacity: document.getElementById("opacidad").value / 100 });
+  overlayCont.options.pane = capa === "vis" ? "pane-visible" : "overlayPane";
+  if (!mapa.hasLayer(overlayCont)) { overlayCont.addTo(mapa); }
+  overlayCont.setUrl(f.c);
+  overlayCont.bringToBack();
+}
+mapa.on("moveend", () => continente());
+
+function ponerCapa(c) {
+  capa = c;
+  document.querySelectorAll("[data-capa]").forEach(b => b.setAttribute("aria-pressed", b.dataset.capa === c));
+  if (overlay) mapa.removeLayer(overlay);
+  if (overlayCont) { mapa.removeLayer(overlayCont); overlayCont = null; }
+  if (velLayer) { mapa.removeLayer(velLayer); velLayer = null; }
+  const lista = cuadros();
+  const url = lista.length ? (c === "viento" ? lista[0].v : lista[0].f) : "";
+  overlay = L.imageOverlay(url, esPron() ? BC : B, { pane: c === "vis" ? "pane-visible" : "overlayPane",
+    opacity: document.getElementById("opacidad").value / 100, interactive:false }).addTo(mapa);
+  precargar(lista);
+  armarLinea(); leyenda();
+  // pronóstico: arrancar en el paso más cercano a la hora actual (no en horas ya pasadas)
+  const ahora = Date.now();
+  const inicio = esPron() ? Math.max(0, lista.findIndex(f => new Date(f.t + "Z").getTime() >= ahora)) : lista.length - 1;
+  if (c === "viento") cargarViento(() => {
+    velLayer = L.velocityLayer({ displayValues:false, data:VIENTO[i].uv, maxVelocity:22, velocityScale:0.009,
+      particleMultiplier:1/300, lineWidth:1.6, colorScale:["rgba(255,255,255,0.85)"], opacity:0.9 }).addTo(mapa);
+    mostrar(i);
+  });
+  mostrar(inicio);
+}
+function paso() {
+  const n = cuadros().length;
+  mostrar(i >= n - 1 ? 0 : i + 1);
+  const ultimo = i === n - 1;
+  reloj = setTimeout(paso, (ultimo ? 2200 : PASO_MS[capa]) * vel);
+}
+function play(on) {
+  jugando = on; clearTimeout(reloj);
+  document.getElementById("play").textContent = on ? "⏸" : "▶";
+  if (on) reloj = setTimeout(paso, PASO_MS[capa] * vel); else mostrar(i);   // en pausa: alta definición
+}
+
+// ---------- clic: datos del punto (lluvia, viento, ráfagas) ----------
+let popup = null, popupLL = null;
+const RUMBOS = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSO","SO","OSO","O","ONO","NO","NNO"];
+function actualizarPopup() {
+  if (!VIENTO || !popupLL) return;
+  const k = esPron() ? i : 0, V = VIENTO[k], h = V.uv[0].header;
+  const fx = Math.round((popupLL.lng - h.lo1) / h.dx), fy = Math.round((h.la1 - popupLL.lat) / h.dy);
+  if (fx < 0 || fy < 0 || fx >= h.nx || fy >= h.ny) { popup.setContent("Fuera del área del mapa"); return; }
+  const j = fy * h.nx + fx, u = V.uv[0].data[j], v = V.uv[1].data[j];
+  const kmh = Math.round(Math.hypot(u, v) * 3.6), desde = (Math.atan2(-u, -v) * 180 / Math.PI + 360) % 360;
+  const d = local(V.t);
+  popup.setContent(`<b>${fDia(d)} · ${p2(d.getUTCHours())} h</b><br>` +
+    `Viento: ${kmh} km/h del ${RUMBOS[Math.round(desde / 22.5) % 16]}<br>Ráfagas: ${V.raf[j]} km/h<br>` +
+    `Lluvia (3 h previas): ${String(V.mm[j]).replace(".", ",")} mm<br><span class="nota">Pronóstico GFS</span>`);
+}
+mapa.on("click", e => {
+  popupLL = e.latlng;
+  popup = L.popup({ maxWidth:240 }).setLatLng(e.latlng).setContent("Cargando…").openOn(mapa);
+  cargarViento(actualizarPopup);
+});
+
+// ---------- controles ----------
+document.querySelectorAll("[data-capa]").forEach(b => b.onclick = () => ponerCapa(b.dataset.capa));
+document.getElementById("play").onclick = () => play(!jugando);
+document.querySelectorAll("[data-vel]").forEach(b => b.onclick = () => {
+  vel = +b.dataset.vel; document.querySelectorAll("[data-vel]").forEach(x => x.setAttribute("aria-pressed", x === b));
+});
+document.getElementById("opacidad").oninput = e => { if (overlay) overlay.setOpacity(e.target.value / 100); if (overlayCont) overlayCont.setOpacity(e.target.value / 100); };
+document.addEventListener("keydown", e => {
+  if (e.key === " ") { e.preventDefault(); play(!jugando); }
+  if (e.key === "ArrowRight") { play(false); mostrar(i + 1); }
+  if (e.key === "ArrowLeft") { play(false); mostrar(i - 1); }
+});
+document.getElementById("actualizado").textContent = "Actualizado " + fDia(local(C.actualizado)) + " " + fHora(local(C.actualizado)) + " h";
+const pedida = new URLSearchParams(location.search).get("capa");
+ponerCapa(["ir", "vis", "pron", "viento"].includes(pedida) ? pedida : "ir");
+play(true);
+setTimeout(() => location.reload(), 10 * 60 * 1000);
+</script>
+</body>
+</html>
